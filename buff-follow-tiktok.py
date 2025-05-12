@@ -1,5 +1,7 @@
-import requests, time, os, sys
+import requests, time, os, sys, threading
 from concurrent.futures import ThreadPoolExecutor
+from http.server import HTTPServer, BaseHTTPRequestHandler
+import socketserver
 
 chars = " ➤ [«/»] >>>"
 
@@ -72,19 +74,40 @@ def buff_follow(username):
                         continue
         except:
             print(f'{chars} Lỗi Không Xác Định cho tài khoản @{username}')
-            time.sleep(5)  # Thêm sleep để tránh spam API
+            time.sleep(5)  # Chờ 5 giây trước khi thử lại
             continue
 
-if __name__ == '__main__':
-    # Lấy danh sách username từ biến môi trường USERNAMES
+# Hàm chạy logic buff follow trong thread riêng
+def run_buff_follow():
     usernames = os.getenv('USERNAMES', '').split(',')
-    # Kiểm tra nếu không có username nào được cung cấp
     if not usernames or usernames == ['']:
         print(f'{chars} Lỗi: Không tìm thấy username TikTok trong biến môi trường USERNAMES.')
         sys.exit(1)
-    # Loại bỏ khoảng trắng và username rỗng
     usernames = [username.strip() for username in usernames if username.strip()]
     print(f'{chars} Đang xử lý các username: {", ".join(["@" + username for username in usernames])}')
     with ThreadPoolExecutor(max_workers=len(usernames)) as executor:
         for username in usernames:
             executor.submit(buff_follow, username)
+
+# HTTP Server tối giản để bind port
+class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-type", "text/plain")
+        self.end_headers()
+        self.wfile.write(b"Buff Follow TikTok is running!")
+
+if __name__ == '__main__':
+    # Chạy logic buff follow trong thread riêng
+    buff_thread = threading.Thread(target=run_buff_follow)
+    buff_thread.daemon = True
+    buff_thread.start()
+
+    # Lấy port từ biến môi trường PORT (Render cung cấp)
+    port = int(os.getenv('PORT', 10000))  # Mặc định là 10000 nếu không có PORT
+
+    # Khởi động HTTP server
+    server_address = ('', port)
+    httpd = HTTPServer(server_address, SimpleHTTPRequestHandler)
+    print(f'{chars} Starting HTTP server on port {port}...')
+    httpd.serve_forever()
