@@ -72,10 +72,19 @@ def buff_follow(username):
                         continue
         except:
             print(f'{chars} Lỗi Không Xác Định cho tài khoản @{username}')
+            time.sleep(5)  # Thêm sleep để tránh spam API
             continue
 
 if __name__ == '__main__':
-    usernames = input(f'{chars} Nhập các Username Tik Tok (không có @) cách nhau bằng dấu phẩy: ').split(',')
+    # Lấy danh sách username từ biến môi trường USERNAMES
+    usernames = os.getenv('USERNAMES', '').split(',')
+    # Kiểm tra nếu không có username nào được cung cấp
+    if not usernames or usernames == ['']:
+        print(f'{chars} Lỗi: Không tìm thấy username TikTok trong biến môi trường USERNAMES.')
+        sys.exit(1)
+    # Loại bỏ khoảng trắng và username rỗng
+    usernames = [username.strip() for username in usernames if username.strip()]
+    print(f'{chars} Đang xử lý các username: {", ".join(["@" + username for username in usernames])}')
     with ThreadPoolExecutor(max_workers=len(usernames)) as executor:
         for username in usernames:
-            executor.submit(buff_follow, username.strip())
+            executor.submit(buff_follow, username)
