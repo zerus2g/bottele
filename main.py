@@ -100,15 +100,27 @@ async def handle_lookup(update: Update, context: ContextTypes.DEFAULT_TYPE, user
 
 async def send_profile_info(reply_obj, data: dict, username: str) -> None:
     """Hàm tách riêng để định dạng và gửi tin nhắn chứa thông tin profile."""
+    print(f"[DEBUG] Data nhận được từ API: {data}", file=sys.stderr)
     actual_username = data.get('username', username)
     tiktok_url = f"https://www.tiktok.com/@{actual_username}"
     keyboard = [[InlineKeyboardButton("🔗 Xem Profile TikTok", url=tiktok_url)], [InlineKeyboardButton("🔄 Tra Cứu Lại", callback_data=f"info_{actual_username}")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    followers = data.get('followers_count', data.get('followers', 0))
-    following = data.get('following_count', 0)
+    followers_raw = data.get('followers_count', data.get('followers', 0))
+    following_raw = data.get('following_count', 0)
+    try:
+        followers = int(str(followers_raw).replace(',', '').replace('.', ''))
+    except Exception as e:
+        print(f"[DEBUG] Lỗi chuyển followers_count: {e} | Giá trị: {followers_raw}", file=sys.stderr)
+        followers = followers_raw
+    try:
+        following = int(str(following_raw).replace(',', '').replace('.', ''))
+    except Exception as e:
+        print(f"[DEBUG] Lỗi chuyển following_count: {e} | Giá trị: {following_raw}", file=sys.stderr)
+        following = following_raw
     msg = (f"👤 <b>Username:</b> {data.get('username', 'N/A')}\n🏷️ <b>Nickname:</b> {data.get('nickname', 'N/A')}\n"
-           f"👥 <b>Followers:</b> {int(followers):,}\n➡️ <b>Following:</b> {int(following):,}")
+           f"👥 <b>Followers:</b> {followers}\n➡️ <b>Following:</b> {following}")
     avatar = data.get('profilePic', data.get('profile_pic', ''))
+    print(f"[DEBUG] Gửi thông tin profile cho user: {actual_username}", file=sys.stderr)
     if avatar:
         await reply_obj.chat.send_photo(photo=avatar, caption=msg, parse_mode='HTML', reply_markup=reply_markup)
     else:
