@@ -27,6 +27,10 @@ PORT = int(os.environ.get("PORT", 8080))
 application = Application.builder().token(BOT_TOKEN).build()
 app = Flask(__name__)
 
+# Khởi tạo event loop toàn cục và initialize bot khi app start
+loop = asyncio.get_event_loop()
+loop.run_until_complete(application.initialize())
+
 # ==============================================================================
 # --- 3. LOGIC CỐT LÕI CỦA BOT (BOT HANDLERS & CORE FUNCTIONS) ---
 # ==============================================================================
@@ -106,10 +110,7 @@ def health_check():
 def webhook_handler():
     try:
         update = Update.de_json(request.get_json(force=True), application.bot)
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
         loop.run_until_complete(application.process_update(update))
-        loop.close()
     except Exception as e:
         print(f"[Webhook Error] {e}", file=sys.stderr)
     return "OK", 200
