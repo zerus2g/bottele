@@ -1,3 +1,5 @@
 # requirements.txt
 python-telegram-bot[ext]
 aiohttp
+flask
+gunicorn
