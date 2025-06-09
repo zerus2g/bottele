@@ -25,7 +25,7 @@ PORT = int(os.environ.get("PORT", 8080))
 # --- 2. KHỞI TẠO ỨNG DỤNG BOT VÀ FLASK SERVER ---
 # ==============================================================================
 application = Application.builder().token(BOT_TOKEN).build()
-server = Flask(__name__)
+app = Flask(__name__)
 
 # ==============================================================================
 # --- 3. LOGIC CỐT LÕI CỦA BOT (BOT HANDLERS & CORE FUNCTIONS) ---
@@ -97,12 +97,12 @@ async def send_profile_info(reply_obj, data: dict, username: str) -> None:
 # ==============================================================================
 # --- 4. LOGIC CỦA FLASK SERVER (WEB SERVER ROUTING) ---
 # ==============================================================================
-@server.route("/")
+@app.route("/")
 def health_check():
     """Route cho cron-job.org ping vào."""
     return "Bot is alive and ready!", 200
 
-@server.route(f"/{BOT_TOKEN}", methods=["POST"])
+@app.route(f"/{BOT_TOKEN}", methods=["POST"])
 def webhook_handler():
     """Route để nhận update từ Telegram."""
     update = Update.de_json(request.get_json(force=True), application.bot)
@@ -133,6 +133,7 @@ def setup_application():
 if __name__ != '__main__':
     setup_application()
 
-# Lệnh `server.run()` chỉ dùng khi bạn test trên máy cá nhân.
+# Lệnh `app.run()` chỉ dùng khi bạn test trên máy cá nhân.
 if __name__ == '__main__':
-    print("Để chạy bot này, hãy dùng một server WSGI như Gunicorn. Ví dụ: gunicorn bot_final_v3:server")
+    app.run(host="0.0.0.0", port=PORT)
+    print("Để chạy bot này, hãy dùng một server WSGI như Gunicorn. Ví dụ: gunicorn main:app")
