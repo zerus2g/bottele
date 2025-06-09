@@ -1,4 +1,4 @@
-# bot_flask_final.py
+# bot_final_v2.py
 
 import sys
 import os
@@ -21,7 +21,7 @@ if not BOT_TOKEN:
     sys.exit(1)
 
 # API Key cho dịch vụ tra cứu TikTok (Tùy chọn)
-TIKTOK_API_KEY = os.environ.get("TIKTOK_API_KEY", "khang") # Dùng 'khang' làm giá trị mặc định
+TIKTOK_API_KEY = os.environ.get("TIKTOK_API_KEY", "khang") # Dùng 'khang' làm giá trị mặc định nếu không set
 
 # Template URL cho API, giúp dễ dàng thay đổi sau này
 API_URL_TEMPLATE = f"https://ahihi.x10.mx/fltik.php?user={{username}}&key={TIKTOK_API_KEY}"
@@ -131,7 +131,6 @@ async def send_profile_info(reply_obj, data: dict, username: str) -> None:
     
     avatar = data.get('profilePic', data.get('profile_pic', ''))
     if avatar:
-        # Gửi tin nhắn có ảnh vào cuộc trò chuyện, thay vì trả lời một tin nhắn cụ thể
         await reply_obj.chat.send_photo(photo=avatar, caption=msg, parse_mode='HTML', reply_markup=reply_markup)
     else:
         await reply_obj.chat.send_message(text=msg, parse_mode='HTML', reply_markup=reply_markup)
@@ -153,11 +152,10 @@ def health_check():
 async def webhook_handler():
     """
     Route để nhận update từ Telegram bằng phương thức POST.
-    Sử dụng token trong URL làm một lớp bảo mật đơn giản.
+    Sử dụng token trong URL làm một lớp bảo mật đơn giản để tránh các request lạ.
     """
     update_data = request.get_json()
     update = Update.de_json(update_data, application.bot)
-    # Dùng process_update để xử lý ngay lập tức thay vì đưa vào hàng đợi
     await application.process_update(update)
     return "OK", 200
 
@@ -167,13 +165,21 @@ async def webhook_handler():
 # ==============================================================================
 
 async def setup_application():
-    """Hàm chạy một lần khi server khởi động để đăng ký handler và set webhook."""
-    # Đăng ký các handler cho bot
+    """
+    Hàm này được chạy một lần khi Gunicorn khởi động server.
+    Nó thực hiện 3 việc quan trọng:
+    1. Đăng ký các handler (bộ xử lý lệnh) cho bot.
+    2. Khởi tạo và sẵn sàng ứng dụng bot (sửa lỗi 'not initialized').
+    3. Thiết lập webhook để Telegram biết nơi gửi tin nhắn đến.
+    """
+    print("Bắt đầu quá trình thiết lập ứng dụng bot...", file=sys.stderr)
+    
+    await application.initialize()
+    
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("info", info))
     application.add_handler(CallbackQueryHandler(button_callback))
     
-    # Tự động set webhook khi server khởi động
     webhook_url = os.environ.get("RENDER_EXTERNAL_URL")
     if webhook_url:
         full_webhook_url = f"{webhook_url}/{BOT_TOKEN}"
@@ -181,9 +187,10 @@ async def setup_application():
         print(f"Webhook đã được thiết lập tới URL: {full_webhook_url}", file=sys.stderr)
     else:
         print("Không tìm thấy RENDER_EXTERNAL_URL, bỏ qua bước tự động set webhook.", file=sys.stderr)
+    
+    print("Thiết lập ứng dụng bot hoàn tất.", file=sys.stderr)
 
-# Chạy hàm setup một lần duy nhất khi ứng dụng bắt đầu
-# `if __name__ != '__main__':` đảm bảo khối lệnh này được Gunicorn thực thi.
+# `if __name__ != '__main__':` đảm bảo khối lệnh này được Gunicorn thực thi khi khởi động.
 if __name__ != '__main__':
     loop = asyncio.get_event_loop()
     if loop.is_running():
@@ -194,4 +201,4 @@ if __name__ != '__main__':
 # Biến `server` sẽ được Gunicorn tìm đến và chạy.
 # Lệnh `server.run()` chỉ dùng khi bạn test trên máy cá nhân.
 if __name__ == '__main__':
-    print("Để chạy bot này, hãy dùng một server WSGI như Gunicorn. Ví dụ: gunicorn bot_flask_final:server")
+    print("Để chạy bot này, hãy dùng một server WSGI như Gunicorn. Ví dụ: gunicorn bot_final_v2:server")
