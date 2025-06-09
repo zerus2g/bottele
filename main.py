@@ -73,14 +73,30 @@ async def handle_lookup(update: Update, context: ContextTypes.DEFAULT_TYPE, user
                         await status_msg.delete()
                         await send_profile_info(reply_obj, data, username)
                     else:
-                        await status_msg.edit_text(f"⚠️ Lỗi: {data.get('message', 'Không tìm thấy user.')}")
+                        try:
+                            await status_msg.edit_text(f"⚠️ Lỗi: {data.get('message', 'Không tìm thấy user.')}")
+                        except Exception as e:
+                            print(f"[Edit Message Error] {e}", file=sys.stderr)
+                            await reply_obj.chat.send_message(f"⚠️ Lỗi: {data.get('message', 'Không tìm thấy user.')}")
                 else:
-                    await status_msg.edit_text(f"⚠️ Lỗi: API tra cứu gặp sự cố (mã {response.status}).")
+                    try:
+                        await status_msg.edit_text(f"⚠️ Lỗi: API tra cứu gặp sự cố (mã {response.status}).")
+                    except Exception as e:
+                        print(f"[Edit Message Error] {e}", file=sys.stderr)
+                        await reply_obj.chat.send_message(f"⚠️ Lỗi: API tra cứu gặp sự cố (mã {response.status}).")
     except asyncio.TimeoutError:
-        await status_msg.edit_text("⚠️ Lỗi: API tra cứu mất quá nhiều thời gian phản hồi.")
+        try:
+            await status_msg.edit_text("⚠️ Lỗi: API tra cứu mất quá nhiều thời gian phản hồi.")
+        except Exception as e:
+            print(f"[Edit Message Error] {e}", file=sys.stderr)
+            await reply_obj.chat.send_message("⚠️ Lỗi: API tra cứu mất quá nhiều thời gian phản hồi.")
     except Exception as e:
         print(f"[CRITICAL] Lỗi không xác định: {e}", file=sys.stderr)
-        await status_msg.edit_text("⚠️ Lỗi: Có sự cố không mong muốn xảy ra.")
+        try:
+            await status_msg.edit_text("⚠️ Lỗi: Có sự cố không mong muốn xảy ra.")
+        except Exception as e2:
+            print(f"[Edit Message Error] {e2}", file=sys.stderr)
+            await reply_obj.chat.send_message("⚠️ Lỗi: Có sự cố không mong muốn xảy ra.")
 
 async def send_profile_info(reply_obj, data: dict, username: str) -> None:
     """Hàm tách riêng để định dạng và gửi tin nhắn chứa thông tin profile."""
