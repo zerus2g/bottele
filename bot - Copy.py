@@ -127,14 +127,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info(f"Đã lưu chat_id nhận thông báo: {NOTIFY_CHAT_ID}")
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    help_text = (
-        "*Các lệnh hỗ trợ:*
-"
-        "\n/help - Hiển thị hướng dẫn sử dụng và các lệnh"
-        "/info <username> - Tra cứu thông tin TikTok của username"
-        "/start - Đăng ký nhận thông báo tự động khi có thay đổi"
-        "\nVí dụ: /info khangdino206"
-    )
+    help_text = """*Các lệnh hỗ trợ:*
+/help - Hiển thị hướng dẫn sử dụng và các lệnh
+/info <username> - Tra cứu thông tin TikTok của username
+/start - Đăng ký nhận thông báo tự động khi có thay đổi
+Ví dụ: /info khangdino206
+"""
     await update.message.reply_text(help_text, parse_mode=ParseMode.MARKDOWN)
     logger.info(f"User {update.effective_user.id} đã dùng lệnh /help")
 
