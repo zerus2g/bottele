@@ -114,8 +114,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Bot đã sẵn sàng gửi thông báo tự động!")
 
 if __name__ == '__main__':
-    # Thay YOUR_BOT_TOKEN bằng token bot Telegram của bạn
-    app = ApplicationBuilder().token("7805035127:AAEJ84rasINPm4e1erLHle9ErB0szwO19vY").base_url("https://proxy.accpreytb4month.workers.dev/bot").build()
+    # Lấy token từ biến môi trường
+    TOKEN = os.environ.get("BOT_TOKEN")
+    app = ApplicationBuilder().token(TOKEN).base_url("https://proxy.accpreytb4month.workers.dev/bot").build()
     app.add_handler(CommandHandler("info", info))
     app.add_handler(CommandHandler("start", start))
     # Đăng ký job định kỳ mỗi 5 phút
