@@ -98,6 +98,7 @@ def health_check():
 # Flask endpoint nhận webhook từ Telegram
 @app.route("/webhook", methods=["POST"])
 async def webhook():
+    await TELEGRAM_APP.initialize()  # Đảm bảo đã initialize trước khi xử lý update
     update = Update.de_json(request.get_json(force=True), TELEGRAM_APP.bot)
     await TELEGRAM_APP.process_update(update)
     return jsonify({"ok": True})
@@ -106,6 +107,7 @@ async def webhook():
 async def set_webhook():
     logger.info("Đang thiết lập webhook...")
     try:
+        await TELEGRAM_APP.initialize()  # Đảm bảo đã initialize trước khi set webhook
         await TELEGRAM_APP.bot.set_webhook(url=WEBHOOK_URL)
         logger.info(f"Webhook được thiết lập thành công tại: {WEBHOOK_URL}")
     except Exception as e:
