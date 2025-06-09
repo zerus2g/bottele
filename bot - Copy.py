@@ -5,7 +5,8 @@ import asyncio
 import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode
-from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+from telegram.ext import Application, CommandHandler, ContextTypes
+from flask import Flask, request, jsonify
 
 # Thiết lập logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -16,6 +17,23 @@ WATCHED_USERS = ["khangdino206"]  # Danh sách username cần theo dõi, bạn c
 WATCHED_DATA_FILE = "watched_data.json"
 NOTIFY_CHAT_ID = None  # Thay bằng chat_id Telegram bạn muốn nhận thông báo, hoặc cập nhật khi bot nhận lệnh /start
 session = requests.Session()  # Tái sử dụng kết nối HTTP
+
+app = Flask(__name__)
+
+# --- Lưu chat_id vào file ---
+CHAT_ID_FILE = "chat_id.txt"
+def save_chat_id(chat_id):
+    with open(CHAT_ID_FILE, "w") as f:
+        f.write(str(chat_id))
+def load_chat_id():
+    if os.path.exists(CHAT_ID_FILE):
+        with open(CHAT_ID_FILE, "r") as f:
+            return f.read().strip()
+    return None
+
+# --- Telegram Application (không dùng polling, chỉ dùng để xử lý update) ---
+TOKEN = os.environ.get("BOT_TOKEN")
+TELEGRAM_APP = Application.builder().token(TOKEN).build()
 
 # Hàm gửi thông tin đẹp với Markdown, ảnh đại diện, nút bấm
 async def info(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -121,10 +139,10 @@ async def check_and_notify(context):
 
 # Lệnh /start để lưu chat_id nhận thông báo
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    global NOTIFY_CHAT_ID
-    NOTIFY_CHAT_ID = update.effective_chat.id
+    chat_id = update.effective_chat.id
+    save_chat_id(chat_id)
     await update.message.reply_text("Bot đã sẵn sàng gửi thông báo tự động!")
-    logger.info(f"Đã lưu chat_id nhận thông báo: {NOTIFY_CHAT_ID}")
+    logger.info(f"Đã lưu chat_id nhận thông báo: {chat_id}")
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     help_text = """*Các lệnh hỗ trợ:*
@@ -136,15 +154,37 @@ Ví dụ: /info khangdino206
     await update.message.reply_text(help_text, parse_mode=ParseMode.MARKDOWN)
     logger.info(f"User {update.effective_user.id} đã dùng lệnh /help")
 
+# --- Flask endpoint nhận webhook từ Telegram ---
+@app.route("/webhook", methods=["POST"])
+def webhook():
+    update = Update.de_json(request.get_json(force=True), TELEGRAM_APP.bot)
+    TELEGRAM_APP.update_queue.put_nowait(update)
+    return jsonify({"ok": True})
+
+# --- Endpoint để cron-job.org gọi kiểm tra thay đổi ---
+@app.route("/check", methods=["GET"])
+def check():
+    # Tạo context giả để truyền vào check_and_notify
+    class DummyContext:
+        def __init__(self, app):
+            self.application = app
+    # Lấy chat_id từ file
+    global NOTIFY_CHAT_ID
+    NOTIFY_CHAT_ID = load_chat_id()
+    # Chạy check_and_notify trong event loop
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        loop.run_until_complete(check_and_notify(DummyContext(TELEGRAM_APP)))
+        return "Checked and notified!"
+    except Exception as e:
+        logger.exception("Error in /check endpoint")
+        return f"Error: {e}", 500
+    finally:
+        loop.close()
+
+# --- Main entry ---
 if __name__ == '__main__':
-    # Lấy token từ biến môi trường
-    TOKEN = os.environ.get("BOT_TOKEN")
-    logger.info("Khởi động bot... Đang kết nối Telegram...")
-    app = ApplicationBuilder().token(TOKEN).base_url("https://proxy.accpreytb4month.workers.dev/bot").build()
-    app.add_handler(CommandHandler("info", info))
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("help", help_command))
-    # Đăng ký job định kỳ mỗi 5 phút
-    app.job_queue.run_repeating(check_and_notify, interval=300, first=10)
-    logger.info("Bot đã khởi động và sẵn sàng hoạt động!")
-    app.run_polling() 
+    # Đặt webhook cho Telegram sau khi deploy (chỉ cần làm 1 lần, hoặc tự động nếu muốn)
+    # TELEGRAM_APP.bot.set_webhook(url="https://<your-domain>/webhook")
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000))) 
