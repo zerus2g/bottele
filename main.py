@@ -51,6 +51,9 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     await query.answer()
     if query.data and query.data.startswith("info_"):
         await handle_lookup(update, context, query.data.replace("info_", ""))
+    elif query.data and query.data.startswith("copy_"):
+        username = query.data.replace("copy_", "")
+        await query.message.reply_text(f"📋 Username: <code>{username}</code>\nBạn có thể copy username này!", parse_mode='HTML')
 
 async def handle_lookup(update: Update, context: ContextTypes.DEFAULT_TYPE, username: str) -> None:
     """Hàm tra cứu thông tin chính."""
@@ -103,7 +106,16 @@ async def send_profile_info(reply_obj, data: dict, username: str) -> None:
     print(f"[DEBUG] Data nhận được từ API: {data}", file=sys.stderr)
     actual_username = data.get('username', username)
     tiktok_url = f"https://www.tiktok.com/@{actual_username}"
-    keyboard = [[InlineKeyboardButton("🔗 Xem Profile TikTok", url=tiktok_url)], [InlineKeyboardButton("🔄 Tra Cứu Lại", callback_data=f"info_{actual_username}")]]
+    keyboard = [
+        [
+            InlineKeyboardButton("🔗 Xem Profile TikTok", url=tiktok_url),
+            InlineKeyboardButton("📋 Copy Username", callback_data=f"copy_{actual_username}")
+        ],
+        [
+            InlineKeyboardButton("🔄 Tra Cứu Lại", callback_data=f"info_{actual_username}"),
+            InlineKeyboardButton("📤 Chia sẻ Profile", switch_inline_query=tiktok_url)
+        ]
+    ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     followers_raw = data.get('followers_count', data.get('followers', 0))
     following_raw = data.get('following_count', 0)
@@ -117,8 +129,13 @@ async def send_profile_info(reply_obj, data: dict, username: str) -> None:
     except Exception as e:
         print(f"[DEBUG] Lỗi chuyển following_count: {e} | Giá trị: {following_raw}", file=sys.stderr)
         following = following_raw
-    msg = (f"👤 <b>Username:</b> {data.get('username', 'N/A')}\n🏷️ <b>Nickname:</b> {data.get('nickname', 'N/A')}\n"
-           f"👥 <b>Followers:</b> {followers}\n➡️ <b>Following:</b> {following}")
+    msg = (
+        f"👤 <b>Username:</b> <code>{data.get('username', 'N/A')}</code>\n"
+        f"🏷️ <b>Nickname:</b> <i>{data.get('nickname', 'N/A')}</i>\n"
+        f"👥 <b>Followers:</b> <b>{followers}</b>\n"
+        f"➡️ <b>Following:</b> <b>{following}</b>\n"
+        f"🔗 <a href='{tiktok_url}'>Xem TikTok Profile</a>"
+    )
     avatar = data.get('profilePic', data.get('profile_pic', ''))
     print(f"[DEBUG] Gửi thông tin profile cho user: {actual_username}", file=sys.stderr)
     if avatar:
