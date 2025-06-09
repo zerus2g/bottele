@@ -1,4 +1,4 @@
-# requirements.txt (phiên bản sửa lỗi cuối cùng)
+# requirements.txt
 python-telegram-bot[ext]
 aiohttp
 flask[async]
