@@ -4,3 +4,4 @@ aiohttp
 flask[async]
 gunicorn
 gevent
+uvicorn
