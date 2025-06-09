@@ -1,5 +1,5 @@
-# requirements.txt
+# requirements.txt (phiên bản sửa lỗi)
 python-telegram-bot[ext]
 aiohttp
-flask
+flask[async]
 gunicorn
