@@ -104,9 +104,14 @@ def health_check():
 
 @app.route(f"/{BOT_TOKEN}", methods=["POST"])
 def webhook_handler():
-    """Route để nhận update từ Telegram."""
-    update = Update.de_json(request.get_json(force=True), application.bot)
-    asyncio.get_event_loop().create_task(application.process_update(update))
+    try:
+        update = Update.de_json(request.get_json(force=True), application.bot)
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        loop.run_until_complete(application.process_update(update))
+        loop.close()
+    except Exception as e:
+        print(f"[Webhook Error] {e}", file=sys.stderr)
     return "OK", 200
 
 # ==============================================================================
