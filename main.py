@@ -103,26 +103,27 @@ def health_check():
     return "Bot is alive and ready!", 200
 
 @server.route(f"/{BOT_TOKEN}", methods=["POST"])
-async def webhook_handler():
+def webhook_handler():
     """Route để nhận update từ Telegram."""
     update = Update.de_json(request.get_json(force=True), application.bot)
-    await application.process_update(update)
+    asyncio.get_event_loop().create_task(application.process_update(update))
     return "OK", 200
 
 # ==============================================================================
 # --- 5. PHẦN KHỞI CHẠY (ENTRY POINT & SETUP) ---
 # ==============================================================================
-async def setup_application():
+def setup_application():
     """Hàm chạy một lần khi Gunicorn khởi động server để setup bot."""
     print("Bắt đầu quá trình thiết lập ứng dụng bot...", file=sys.stderr)
-    await application.initialize()
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("info", info))
     application.add_handler(CallbackQueryHandler(button_callback))
     webhook_url = os.environ.get("RENDER_EXTERNAL_URL")
     if webhook_url:
         full_webhook_url = f"{webhook_url}/{BOT_TOKEN}"
-        await application.bot.set_webhook(url=full_webhook_url, allowed_updates=Update.ALL_TYPES)
+        import requests
+        set_webhook_url = f"https://api.telegram.org/bot{BOT_TOKEN}/setWebhook"
+        requests.post(set_webhook_url, data={"url": full_webhook_url})
         print(f"Webhook đã được thiết lập tới URL: {full_webhook_url}", file=sys.stderr)
     else:
         print("Không tìm thấy RENDER_EXTERNAL_URL.", file=sys.stderr)
@@ -130,7 +131,7 @@ async def setup_application():
 
 # Khối lệnh này đảm bảo hàm setup được chạy đúng cách trong môi trường Gunicorn.
 if __name__ != '__main__':
-    asyncio.run(setup_application())
+    setup_application()
 
 # Lệnh `server.run()` chỉ dùng khi bạn test trên máy cá nhân.
 if __name__ == '__main__':
