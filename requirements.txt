@@ -1,4 +1,4 @@
-python-telegram-bot[ext]
-aiohttp
-flask[async]
-gunicorn
+python-telegram-bot==20.3
+fastapi
+uvicorn
+requests
