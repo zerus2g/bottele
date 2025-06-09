@@ -1,123 +1,148 @@
-from flask import Flask, request, jsonify
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.constants import ParseMode
-from telegram.ext import Application, CommandHandler, ContextTypes
-import requests
-import json
+# bot_webhook.py
+
+import sys
 import os
 import asyncio
-import logging
+import aiohttp
+from flask import Flask, request, jsonify
 
-# Thiết lập logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, Bot
+from telegram.ext import Application, CommandHandler, ContextTypes, CallbackQueryHandler
 
-API_URL = "https://ahihi.x10.mx/fltik.php?user={username}&key=khang"
-session = requests.Session()  # Tái sử dụng kết nối HTTP
-
-app = Flask(__name__)
-
-# --- Telegram Application ---
-TOKEN = os.environ.get("BOT_TOKEN")
-WEBHOOK_URL = os.environ.get("WEBHOOK_URL")  # Lấy từ biến môi trường
-if not TOKEN or not WEBHOOK_URL:
-    raise ValueError("BOT_TOKEN và WEBHOOK_URL phải được thiết lập trong biến môi trường")
-
-TELEGRAM_APP = Application.builder().token(TOKEN).base_url("https://proxy.accpreytb4month.workers.dev/bot").build()
-
-# Hàm gửi thông tin đẹp với Markdown, ảnh đại diện, nút bấm
-async def info(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    logger.info(f"Nhận lệnh /info từ user {update.effective_user.id} với args: {context.args}")
-    if context.args:
-        username = context.args[0]
-        await update.message.reply_text("⏳ Đang tra cứu, vui lòng chờ...")
-        url = API_URL.format(username=username)
-        try:
-            response = session.get(url, timeout=5)
-            if response.status_code == 200:
-                data = response.json()
-                if data.get("success"):
-                    msg = (
-                        f"*👤 Username:* `{data['username']}`\n"
-                        f"*🆔 User ID:* `{data['user_id']}`\n"
-                        f"*🌍 Region:* `{data['region']}`\n"
-                        f"*👥 Followers:* `{data['followers_count']}`\n"
-                        f"*➡️ Following:* `{data['following_count']}`\n"
-                        f"*📝 Bio:* _{data['bio']}_\n"
-                        f"*🏷️ Nickname:* `{data['nickname']}`\n"
-                        f"*🔒 Private:* `{data['privateAccount']}`\n"
-                    )
-                    keyboard = [
-                        [InlineKeyboardButton("Xem trên TikTok", url=f"https://www.tiktok.com/@{data['username']}")]
-                    ]
-                    reply_markup = InlineKeyboardMarkup(keyboard)
-                    await update.message.reply_photo(
-                        photo=data['profilePic'],
-                        caption=msg,
-                        parse_mode=ParseMode.MARKDOWN,
-                        reply_markup=reply_markup
-                    )
-                    logger.info(f"Đã gửi thông tin TikTok cho user {update.effective_user.id} ({username})")
-                else:
-                    await update.message.reply_text("Không lấy được thông tin từ API.")
-                    logger.warning(f"API trả về không thành công cho username: {username}")
-            else:
-                await update.message.reply_text("Lỗi kết nối API.")
-                logger.error(f"Lỗi kết nối API với username: {username}, status_code: {response.status_code}")
-        except Exception as e:
-            await update.message.reply_text("Lỗi khi truy vấn API hoặc API quá chậm.")
-            logger.exception(f"Lỗi khi truy vấn API cho username: {username}")
-    else:
-        await update.message.reply_text("Vui lòng nhập username. Ví dụ: /info khangdino206")
-        logger.warning("Lệnh /info không có username đi kèm.")
+# --- PHẦN BOT CỦA CẬU (giữ nguyên logic) ---
+API_URL_TIKTOK = "https://ahihi.x10.mx/fltik.php?user={username}&key=khang"
+BOT_TOKEN = "7805035127:AAEA5bsioLvnaZKo4XoXy4P1n-VMfmaGbK0" # Token của cậu
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Bot đã sẵn sàng hỗ trợ tra cứu thông tin TikTok!")
-    logger.info(f"User {update.effective_user.id} đã dùng lệnh /start")
+    await update.message.reply_text("Chào bạn! Gõ /info <username> để lấy thông tin TikTok.")
 
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    help_text = """*Các lệnh hỗ trợ:*
-/help - Hiển thị hướng dẫn sử dụng và các lệnh
-/info <username> - Tra cứu thông tin TikTok của username
-/start - Chào bot
-Ví dụ: /info khangdino206
-"""
-    await update.message.reply_text(help_text, parse_mode=ParseMode.MARKDOWN)
-    logger.info(f"User {update.effective_user.id} đã dùng lệnh /help")
+async def info(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if context.args:
+        username = context.args[0]
+        await handle_lookup(update, context, username)
+    else:
+        await update.message.reply_text("Vui lòng nhập username. Ví dụ: /info khangdino206")
 
-# Thêm handler cho các lệnh
-TELEGRAM_APP.add_handler(CommandHandler("start", start))
-TELEGRAM_APP.add_handler(CommandHandler("help", help_command))
-TELEGRAM_APP.add_handler(CommandHandler("info", info))
+async def handle_lookup(update_or_query, context, username):
+    # Xác định đối tượng để trả lời tin nhắn
+    if hasattr(update_or_query, 'message') and update_or_query.message:
+        reply_obj = update_or_query.message
+        status_msg = await reply_obj.reply_text("⏳ Đang tra cứu thông tin...")
+    elif hasattr(update_or_query, 'callback_query') and update_or_query.callback_query:
+        reply_obj = update_or_query.callback_query.message
+        # Gửi một tin nhắn mới thay vì chỉnh sửa tin nhắn cũ có nút bấm
+        status_msg = await reply_obj.chat.send_message("⏳ Đang tra cứu lại thông tin...")
+    else: # Fallback an toàn
+        return
 
-# Flask endpoint để kiểm tra server
-@app.route("/", methods=["GET"])
-def health_check():
-    return jsonify({"status": "Bot is running"})
-
-# Flask endpoint nhận webhook từ Telegram
-@app.route("/webhook", methods=["POST"])
-async def webhook():
-    await TELEGRAM_APP.initialize()  # Đảm bảo đã initialize trước khi xử lý update
-    update = Update.de_json(request.get_json(force=True), TELEGRAM_APP.bot)
-    await TELEGRAM_APP.process_update(update)
-    return jsonify({"ok": True})
-
-# Hàm thiết lập webhook
-async def set_webhook():
-    logger.info("Đang thiết lập webhook...")
+    api_url = API_URL_TIKTOK.format(username=username)
+    print(f"[DEBUG] Gọi API: {api_url}", file=sys.stderr)
     try:
-        await TELEGRAM_APP.initialize()  # Đảm bảo đã initialize trước khi set webhook
-        await TELEGRAM_APP.bot.set_webhook(url=WEBHOOK_URL)
-        logger.info(f"Webhook được thiết lập thành công tại: {WEBHOOK_URL}")
+        async with aiohttp.ClientSession() as session:
+            async with session.get(api_url, timeout=10) as response: # Tăng timeout lên 10s
+                print(f"[DEBUG] HTTP status: {response.status}", file=sys.stderr)
+                if response.status == 200:
+                    data = await response.json()
+                    print(f"[DEBUG] Dữ liệu trả về: {data}", file=sys.stderr)
+                    if data.get("success") or data.get("status") == "success":
+                        tiktok_url = f"https://www.tiktok.com/@{data.get('username', username)}"
+                        keyboard = [
+                            [InlineKeyboardButton("🔗 Xem profile TikTok", url=tiktok_url)],
+                            [InlineKeyboardButton("🔄 Tra cứu lại", callback_data=f"info_{username}")]
+                        ]
+                        reply_markup = InlineKeyboardMarkup(keyboard)
+                        msg = (
+                            f"👤 <b>Username:</b> {data.get('username', 'N/A')}\n"
+                            f"🏷️ <b>Nickname:</b> {data.get('nickname', 'N/A')}\n"
+                            f"🌍 <b>Region:</b> {data.get('region', 'N/A')}\n"
+                            f"👥 <b>Followers:</b> {data.get('followers_count', data.get('followers', 'N/A'))}\n"
+                            f"➡️ <b>Following:</b> {data.get('following_count', 'N/A')}\n"
+                            f"📝 <b>Bio:</b> {data.get('bio', '(trống)')}\n"
+                            f"🔒 <b>Private Account:</b> {'Riêng tư' if data.get('privateAccount', False) else 'Công khai'}"
+                        )
+                        avatar = data.get('profilePic', data.get('profile_pic', ''))
+                        await status_msg.delete()
+                        if avatar:
+                            await reply_obj.reply_photo(photo=avatar, caption=msg, parse_mode='HTML', reply_markup=reply_markup)
+                        else:
+                            await reply_obj.reply_text(msg, parse_mode='HTML', reply_markup=reply_markup)
+                    else:
+                        await status_msg.edit_text(f"Lỗi: {data.get('message', 'Không tìm thấy user hoặc API lỗi')}")
+                else:
+                    error_text = await response.text()
+                    await status_msg.edit_text(f"Lỗi HTTP {response.status}: Server API không phản hồi.")
     except Exception as e:
-        logger.error(f"Lỗi khi thiết lập webhook: {e}")
+        print(f"[DEBUG] Exception: {e}", file=sys.stderr)
+        await status_msg.edit_text(f"Đã xảy ra lỗi khi tra cứu: {e}")
 
-# Hàm chạy ứng dụng
-def run_app():
+async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    if query.data.startswith("info_"):
+        username = query.data.replace("info_", "")
+        # Gọi lại hàm tra cứu
+        await handle_lookup(update, context, username)
+
+# --- PHẦN SERVER (thêm vào để chạy trên Render) ---
+# Khởi tạo web server bằng Flask
+server = Flask(__name__)
+
+# Khởi tạo bot application
+# Chú ý: không có .build() ở đây vội
+application = Application.builder().token(BOT_TOKEN).build()
+
+# Thêm các handler vào application như cũ
+application.add_handler(CommandHandler("start", start))
+application.add_handler(CommandHandler("info", info))
+application.add_handler(CallbackQueryHandler(button_callback))
+
+# Route mặc định để cron-job.org gọi vào, giúp bot luôn "thức"
+@server.route("/")
+def index():
+    return "Bot đang hoạt động ngon lành cành đào!", 200
+
+# Route để Telegram gửi update (webhook)
+@server.route("/webhook", methods=["POST"])
+async def webhook():
+    # Lấy dữ liệu Telegram gửi đến và đưa cho application xử lý
+    await application.update_queue.put(Update.de_json(request.get_json(force=True), application.bot))
+    return "OK", 200
+
+# Hàm main để khởi chạy mọi thứ
+async def main():
+    # Lấy URL của web service trên Render
+    # Render sẽ tự động set biến môi trường RENDER_EXTERNAL_URL
+    webhook_url = os.environ.get("RENDER_EXTERNAL_URL")
+    if not webhook_url:
+        print("Không tìm thấy RENDER_EXTERNAL_URL, không thể set webhook.", file=sys.stderr)
+        return
+
+    # Khởi tạo event loop để chạy các tác vụ bất đồng bộ
+    # Đây là một kỹ thuật để chạy application.initialize() và application.start() mà không block
+    # toàn bộ chương trình, cho phép Flask server chạy song song.
+    async with application:
+        await application.initialize()
+        await application.start()
+        
+        # Set webhook cho Telegram, chỉ đường cho nó đến URL của chúng ta
+        # Thêm /webhook vào cuối URL
+        print(f"Đang set webhook tới: {webhook_url}/webhook", file=sys.stderr)
+        await application.bot.set_webhook(url=f"{webhook_url}/webhook")
+
+        # Lấy port mà Render cung cấp
+        port = int(os.environ.get("PORT", 8080))
+        # Chạy Flask server
+        # Dùng `if __name__ == '__main__':` để đảm bảo phần này chỉ chạy khi file được thực thi trực tiếp
+        # Gunicorn (sẽ dùng trên Render) sẽ không chạy vào đây.
+        # Dòng này chủ yếu để test trên máy cá nhân.
+        # server.run(host="0.0.0.0", port=port) # Dòng này không cần thiết khi deploy với gunicorn
+
+# Chạy hàm main khi khởi động
+# Dùng asyncio.run() để thực thi hàm async main
+if __name__ == "__main__":
     loop = asyncio.get_event_loop()
-    loop.run_until_complete(set_webhook())
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
-
-if __name__ == '__main__':
-    run_app()
+    if loop.is_running():
+        print("Asyncio loop is already running.")
+        task = loop.create_task(main())
+    else:
+        asyncio.run(main())
